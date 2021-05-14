@@ -1,4 +1,4 @@
-import { Calendar, EventInput } from '@fullcalendar/core';
+import { Calendar, EventApi, EventInput } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 
@@ -10,7 +10,7 @@ const ctrlKeyDescriptor = Object.getOwnPropertyDescriptor(
 );
 
 // Always return false for event.ctrlKey when event is of type MouseEvent
-ctrlKeyDescriptor.get = function() {
+ctrlKeyDescriptor.get = function () {
   return false;
 };
 
@@ -20,9 +20,29 @@ Object.defineProperty(MouseEvent.prototype, 'ctrlKey', ctrlKeyDescriptor);
 let calendarEl: HTMLElement = document.getElementById('app')!;
 
 let ctrlHeld = false;
-['keydown', 'keyup'].forEach(x =>
-  document.addEventListener(x, (e: KeyboardEvent) => (ctrlHeld = e.ctrlKey))
-);
+const [subscribe, unsubscribe] = (function () {
+  let subscriptions: Function[] = [];
+  ['keydown', 'keyup'].forEach(x =>
+    document.addEventListener(x, (e: KeyboardEvent) => {
+      // emit only when the key state has changed
+      if (ctrlHeld !== e.ctrlKey)
+        subscriptions.forEach(fun => fun(e.ctrlKey));
+
+      ctrlHeld = e.ctrlKey;
+    })
+  );
+
+  function subscribe (callback: Function) {
+    subscriptions.push(callback);
+  }
+
+  function unsubscribe(callback: Function) {
+    const index = subscriptions.indexOf(callback);
+    subscriptions.splice(index, 1);
+  }
+
+  return [subscribe, unsubscribe];
+})();
 
 const extractEventProperties = ({ title, start, end, allDay }: EventInput) => ({
   title,
@@ -35,12 +55,21 @@ let calendar = new Calendar(calendarEl, {
   plugins: [dayGridPlugin, interactionPlugin],
   editable: true,
   droppable: true,
-  eventDrop: e => {
-    if (ctrlHeld) {
-      e.revert();
-      calendar.addEvent(extractEventProperties(e.event));
+  eventDragStart: e => {
+    let event: EventApi;
+    const callback = (ctrlKey: boolean) => {
+      if (ctrlKey) {
+        event = calendar.addEvent(extractEventProperties(e.event));
+      }
+      else {
+        event && event.remove();
+      }
     }
+    callback(ctrlHeld); // Handle the case when Ctrl is alread being held
+    subscribe(callback); // Handle the case when Ctrl is being held or unheld during the drag
+    e.event.setExtendedProp('callback', callback); // store the callback for further unsubscribe
   },
+  eventDrop: e => unsubscribe(e.event.extendedProps['callback']), // stop listening when the event has been dropped
   events: [
     {
       title: 'event1',
