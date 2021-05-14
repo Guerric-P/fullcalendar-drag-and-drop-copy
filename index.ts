@@ -69,7 +69,7 @@ let calendar = new Calendar(calendarEl, {
     subscribe(callback); // Handle the case when Ctrl is being held or unheld during the drag
     e.event.setExtendedProp('callback', callback); // store the callback for further unsubscribe
   },
-  eventDrop: e => unsubscribe(e.event.extendedProps['callback']), // stop listening when the event has been dropped
+  eventDragStop: e => unsubscribe(e.event.extendedProps['callback']), // stop listening when the event has been dropped
   events: [
     {
       title: 'event1',
